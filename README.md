@@ -41,13 +41,13 @@ Credentials are read only by server modules. Do not add a PUBLIC_ prefix or comm
 
 Watched status and counts are derived from viewing records for that year. Dates are calendar strings (`YYYY-MM-DD`), not midnight timestamps. Viewing dates must belong to the entry’s collection year. Removing the final viewing returns the movie to Unwatched. Removing a year entry also removes its viewing records, after an explicit UI confirmation; other years remain intact.
 
-Movie metadata is cached locally and refreshed on collection access after 150 days. If refresh fails past six months, stale metadata is cleared while your year membership and viewing records are preserved. Posters use TMDB’s image CDN. TMDB attribution is in About & credits. Search enriches results with genres and top cast using four concurrent detail requests; details are cached in server memory for one hour (up to 200 movies). Full details include up to 12 cast members, runtime, a TMDB user score when votes exist, and a synopsis excerpt. Adding from either search view clears and refocuses the search field.
+Movie metadata is cached locally and refreshed on collection access after 150 days. If refresh fails past six months, stale metadata is cleared while your year membership and viewing records are preserved. Posters use TMDB’s image CDN. TMDB attribution is in About & credits. Search uses only TMDB search data and a genre-ID mapping stored in MongoDB’s `metadata` collection (`tmdb-movie-genres-en-US`). This mapping survives cold starts, refreshes after 24 hours, and falls back to the saved mapping on refresh failure (retrying after five minutes, with a six-month maximum cache age). No per-result detail calls are made. Browser requests time out after 20 seconds with a retry message; details are cached in server memory for one hour (up to 200 movies). Full details include up to 12 cast members, runtime, a TMDB user score when votes exist, and a synopsis excerpt. Adding from either search view clears and refocuses the search field.
 
 ## Routes
 
 - `GET /?year=2026` — collection, server-loaded
 - `GET /?year=2026&view=history` — history grouped by day
-- `GET /api/search?q=Halloween` — movie results with genres and top three cast members
+- `GET /api/search?q=Halloween` — movie results with genres and TMDB user scores
 - `GET /api/movies/:id` — synopsis, runtime, genres, up to 12 cast members, and TMDB user score
 - `POST /api/entries` — `{ year, tmdbId }`
 - `DELETE /api/entries/:id` — removes the entry and its viewings

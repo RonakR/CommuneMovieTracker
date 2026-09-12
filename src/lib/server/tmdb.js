@@ -2,11 +2,26 @@ import { env } from '$env/dynamic/private';
 import { AppError } from './domain.js';
 import { catalog } from './catalog.js';
 import { normalizeMovie, moviePreview } from './movie-data.js';
+import { database } from './db.js';
+import { createGenreCache } from './genre-cache.js';
 export const isDemo = () => env.DEMO_MODE === 'true';
 const detailsCache = new Map();
 const inFlight = new Map();
 const CACHE_MS = 60 * 60 * 1000;
 const CACHE_SIZE = 200;
+const getGenres = createGenreCache({
+  read: async () => {
+    const { db } = await database();
+    return db.collection('metadata').findOne({ _id: 'tmdb-movie-genres-en-US' });
+  },
+  write: async (value) => {
+    const { db } = await database();
+    await db
+      .collection('metadata')
+      .updateOne({ _id: 'tmdb-movie-genres-en-US' }, { $set: value }, { upsert: true });
+  },
+  fetchGenres: async () => (await request('genre/movie/list', { language: 'en-US' })).genres
+});
 async function request(path, params = {}) {
   if (!env.TMDB_READ_ACCESS_TOKEN)
     throw new AppError('Add your TMDB read access token to .env and restart the server.', 503);
@@ -40,31 +55,17 @@ export async function searchMovies(query) {
     return catalog
       .filter((m) => m.title.toLowerCase().includes(query.toLowerCase().trim()))
       .map(moviePreview);
-  const response = await request('search/movie', {
-    query: query.trim(),
-    include_adult: false,
-    language: 'en-US'
-  });
-  const movies = response.results.slice(0, 20);
-  const results = new Array(movies.length);
-  let next = 0;
-  // Search doesn't include cast. Limit enrichment to four concurrent detail requests.
-  await Promise.all(
-    Array.from({ length: Math.min(4, movies.length) }, async () => {
-      while (next < movies.length) {
-        const index = next++;
-        try {
-          results[index] = moviePreview(await getMovieDetails(movies[index].id));
-        } catch {
-          results[index] = moviePreview({
-            ...normalizeMovie(movies[index]),
-            detailsUnavailable: true
-          });
-        }
-      }
+  const [response, genres] = await Promise.all([
+    request('search/movie', { query: query.trim(), include_adult: false, language: 'en-US' }),
+    getGenres()
+  ]);
+  const names = new Map(genres.map((genre) => [genre.id, genre.name]));
+  return response.results.slice(0, 20).map((movie) =>
+    moviePreview({
+      ...normalizeMovie(movie),
+      genres: (movie.genre_ids || []).map((id) => names.get(id)).filter(Boolean)
     })
   );
-  return results;
 }
 export async function getMovieDetails(id) {
   if (!/^\d+$/.test(String(id)) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0)

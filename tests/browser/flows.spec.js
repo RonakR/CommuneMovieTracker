@@ -108,7 +108,7 @@ test('mobile: collection fits, modal works with keyboard, search and navigation'
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
 });
 
-test('search details: top cast, genres, full details, back navigation and add reset', async ({
+test('search details: score, genres, full details, back navigation and add reset', async ({
   page,
   request
 }) => {
@@ -123,10 +123,8 @@ test('search details: top cast, genres, full details, back navigation and add re
     await page.getByRole('button', { name: 'Search', exact: true }).click();
     const row = page.locator('.search-result');
     await expect(row).toContainText('Horror · Thriller');
-    await expect(row.locator('.cast-preview')).toHaveText(
-      'Donald Pleasence, Jamie Lee Curtis, Nancy Kyes'
-    );
-    await expect(row).not.toContainText('P. J. Soles');
+    await expect(row).not.toContainText('Jamie Lee Curtis');
+    await expect(row.locator('.search-score')).toContainText('Not yet rated');
     await page.screenshot({ path: 'test-results/search-list.png' });
     await page.getByRole('button', { name: 'View details for Halloween (1978)' }).click();
     await expect(page.locator('.catalog-cast')).toContainText('P. J. Soles');
@@ -184,7 +182,7 @@ test('details: ratings, missing metadata, and request failure recovery', async (
   await page.getByRole('button', { name: '＋ Add movie', exact: true }).click();
   await page.getByRole('textbox', { name: 'Search movie catalog' }).fill('Psycho');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
-  await expect(page.locator('.search-result')).toContainText('Cast unavailable');
+  await expect(page.locator('.search-result')).toContainText('Genres unavailable');
   await page.route(
     '**/api/movies/539',
     (route) =>
@@ -209,4 +207,36 @@ test('details: ratings, missing metadata, and request failure recovery', async (
   await expect(page.locator('.tmdb-score')).toContainText('1,234 votes');
   await expect(page.locator('.catalog-overview')).toContainText('No synopsis available.');
   await expect(page.locator('.catalog-cast')).toContainText('Cast information unavailable.');
+});
+
+test('search makes no movie-detail requests until a result is opened', async ({ page }) => {
+  await page.goto('/?year=2195');
+  await expect(page.locator('.brand-star svg')).toBeVisible();
+  await expect(page.locator('.empty-icon svg')).toBeVisible();
+  const requests = [];
+  page.on('request', (req) => {
+    if (req.url().includes('/api/movies/')) requests.push(req.url());
+  });
+  await page.getByRole('button', { name: '＋ Add movie', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Search movie catalog' }).fill('Halloween');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.locator('.search-result')).toContainText('Horror');
+  await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeEnabled();
+  expect(requests).toHaveLength(0);
+  await page.getByRole('button', { name: 'View details for Halloween (1978)' }).click();
+  await expect(page.locator('.catalog-cast')).toContainText('Jamie Lee Curtis');
+  expect(requests).toHaveLength(1);
+});
+
+test('a stalled search exits loading and allows a retry', async ({ page }) => {
+  await page.goto('/');
+  await page.route('**/api/search?*', () => {});
+  await page.getByRole('button', { name: '＋ Add movie', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Search movie catalog' }).fill('Halloween');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('took too long', { timeout: 25000 });
+  await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeEnabled();
+  await page.unroute('**/api/search?*');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.locator('.search-result')).toContainText('Halloween');
 });

@@ -18,26 +18,7 @@ export function normalizeMovie(movie) {
   };
 }
 export function moviePreview(movie) {
-  const {
-    tmdbId,
-    title,
-    releaseDate,
-    posterPath,
-    genres,
-    cast,
-    detailsUnavailable,
-    artwork,
-    tagline
-  } = movie;
-  return {
-    tmdbId,
-    title,
-    releaseDate,
-    posterPath,
-    genres,
-    cast: cast.slice(0, 3),
-    detailsUnavailable,
-    artwork,
-    tagline
-  };
+  const { tmdbId, title, releaseDate, posterPath, genres, rating, voteCount, artwork, tagline } =
+    movie;
+  return { tmdbId, title, releaseDate, posterPath, genres, rating, voteCount, artwork, tagline };
 }

@@ -2,6 +2,8 @@
   import { onMount, tick } from 'svelte';
   import { goto, invalidate } from '$app/navigation';
   import { page } from '$app/state';
+  import Asterisk from '$lib/components/Asterisk.svelte';
+  import { requestJson } from '$lib/request-json.js';
   import Poster from '$lib/components/Poster.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import { localDate, formatDate } from '$lib/dates.js';
@@ -22,6 +24,8 @@
   let results = $state([]);
   let searching = $state(false);
   let didSearch = $state(false);
+  let searchController;
+  let detailController;
   let searchSequence = 0;
   let detailSequence = 0;
   let catalogMovie = $state(null);
@@ -65,6 +69,8 @@
   });
   function close() {
     if (!pending) {
+      searchController?.abort();
+      detailController?.abort();
       modal = null;
       error = '';
       searchSequence++;
@@ -73,6 +79,9 @@
     }
   }
   function openAdd() {
+    searchController?.abort();
+    searchSequence++;
+    searching = false;
     error = '';
     catalogQuery = '';
     results = [];
@@ -122,6 +131,9 @@
   }
   async function findMovies(event) {
     event?.preventDefault();
+    searchController?.abort();
+    searchController = new AbortController();
+    const signal = searchController.signal;
     const sequence = ++searchSequence;
     searching = true;
     results = [];
@@ -129,10 +141,10 @@
     error = '';
     didSearch = false;
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(catalogQuery)}`);
-      const value = await response.json();
+      const value = await requestJson(`/api/search?q=${encodeURIComponent(catalogQuery)}`, {
+        signal
+      });
       if (sequence !== searchSequence) return;
-      if (!response.ok) throw new Error(value.message);
       results = value.movies;
       didSearch = true;
     } catch (err) {
@@ -148,6 +160,8 @@
     goto(`/?year=${year}${isHistory ? '&view=history' : ''}`, { keepFocus: true });
   }
   async function showMovie(movie, trigger) {
+    detailController?.abort();
+    detailController = new AbortController();
     detailsTrigger = trigger || detailsTrigger;
     catalogMovie = movie;
     detailsLoading = true;
@@ -157,10 +171,10 @@
     await tick();
     detailsHeading?.focus();
     try {
-      const response = await fetch(`/api/movies/${movie.tmdbId}`);
-      const value = await response.json();
+      const value = await requestJson(`/api/movies/${movie.tmdbId}`, {
+        signal: detailController.signal
+      });
       if (sequence !== detailSequence) return;
-      if (!response.ok) throw new Error(value.message || 'Movie details are unavailable.');
       catalogMovie = value.movie;
     } catch (err) {
       if (sequence === detailSequence)
@@ -170,6 +184,7 @@
     }
   }
   async function backToResults() {
+    detailController?.abort();
     detailSequence++;
     catalogMovie = null;
     detailsError = '';
@@ -185,6 +200,8 @@
       false
     );
     if (!saved) return;
+    searchController?.abort();
+    detailController?.abort();
     searchSequence++;
     detailSequence++;
     catalogQuery = '';
@@ -217,7 +234,7 @@
   </div>
   <header>
     <a class="brand" href={`/?year=${data.year}`} aria-label="Commune Video home"
-      ><span>COMMUNE<span class="brand-star">✳</span>VIDEO</span><small
+      ><span>COMMUNE<span class="brand-star"><Asterisk /></span>VIDEO</span><small
         >GOOD MOVIES. BETTER COMPANY.</small
       ></a
     >
@@ -372,7 +389,7 @@
                 </article>{/each}
             </div>
           {:else}<div class="empty-state">
-              <span class="empty-icon">✳</span>
+              <span class="empty-icon"><Asterisk /></span>
               <h2>
                 {!data.entries.length
                   ? 'A fresh shelf. A new season.'
@@ -580,13 +597,8 @@
                   >
                 </h3>
                 <p class="genre-list">{movie.genres?.join(' · ') || 'Genres unavailable'}</p>
-                <p class="cast-preview">
-                  {movie.cast?.length
-                    ? movie.cast
-                        .slice(0, 3)
-                        .map((actor) => actor.name)
-                        .join(', ')
-                    : 'Cast unavailable'}
+                <p class="search-score">
+                  {movie.rating != null ? `TMDB ${movie.rating.toFixed(1)} / 10` : 'Not yet rated'}
                 </p>
                 <span class="view-details-label">View details →</span>
               </div>
@@ -599,9 +611,9 @@
             >
           </article>
         {:else}
-          {#if searching}<p class="dialog-copy">
-              Finding movies, cast, and genres…
-            </p>{:else if didSearch}<p class="dialog-copy">
+          {#if searching}<p class="dialog-copy">Finding movies…</p>{:else if didSearch}<p
+              class="dialog-copy"
+            >
               No movies found. Try another title.
             </p>{:else}<div class="search-hint">THE NEXT GOOD NIGHT STARTS HERE.</div>{/if}
         {/each}

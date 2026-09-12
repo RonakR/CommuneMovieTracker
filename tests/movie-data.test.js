@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeMovie, moviePreview } from '../src/lib/server/movie-data.js';
 
-test('provider data keeps cast billing order and only three names in search previews', () => {
+test('details keep cast billing order while search previews exclude cast and synopsis', () => {
   const movie = normalizeMovie({
     id: 123,
     title: 'Example',
@@ -23,10 +23,9 @@ test('provider data keeps cast billing order and only three names in search prev
     ['First', 'Second', 'Third', 'Fourth']
   );
   const preview = moviePreview(movie);
-  assert.deepEqual(
-    preview.cast.map((actor) => actor.name),
-    ['First', 'Second', 'Third']
-  );
+  assert.equal('cast' in preview, false);
+  assert.equal('overview' in preview, false);
+  assert.equal(preview.rating, 7.25);
   assert.deepEqual(preview.genres, ['Horror']);
   assert.equal(movie.rating, 7.25);
   assert.equal(movie.voteCount, 10);
