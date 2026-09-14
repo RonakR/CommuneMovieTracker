@@ -56,10 +56,21 @@ test('desktop: add, rewatch, correct dates, browse days, remove and isolate year
       .getByRole('button', { name: /^Remove viewing/ })
       .first()
       .click();
+    await page.getByLabel('Password', { exact: true }).fill('wrong');
+    await page.getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Incorrect password');
+    await expect(page.locator('.history-row')).toHaveCount(2);
+    await page.getByLabel('Password', { exact: true }).fill('browser-test-password');
     await page.getByRole('button', { name: 'Remove', exact: true }).click();
     await expect(page.locator('.history-row')).toHaveCount(1);
     await page.reload();
     await expect(page.locator('.history-row')).toHaveCount(1);
+    await page
+      .getByRole('button', { name: /^Remove viewing/ })
+      .first()
+      .click();
+    await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     const invalid = await request.post('/api/viewings', {
       headers: { origin },
       data: { yearEntryId: id, watchedOn: '2198-10-31' }
@@ -79,7 +90,13 @@ test('desktop: add, rewatch, correct dates, browse days, remove and isolate year
     await expect(page.locator('.movie-card')).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
-    if (id) await request.delete(`/api/entries/${id}`, { headers: { origin } });
+    if (id) {
+      await request.post('/api/delete-session', {
+        headers: { origin },
+        data: { password: 'browser-test-password' }
+      });
+      await request.delete(`/api/entries/${id}`, { headers: { origin } });
+    }
   }
 });
 
@@ -172,7 +189,13 @@ test('search details: score, genres, full details, back navigation and add reset
     await page.getByRole('button', { name: 'View details for Halloween (1978)' }).click();
     await expect(page.getByRole('button', { name: '✓ Already on your shelf' })).toBeDisabled();
   } finally {
-    if (id) await request.delete(`/api/entries/${id}`, { headers: { origin } });
+    if (id) {
+      await request.post('/api/delete-session', {
+        headers: { origin },
+        data: { password: 'browser-test-password' }
+      });
+      await request.delete(`/api/entries/${id}`, { headers: { origin } });
+    }
   }
 });
 
@@ -239,4 +262,33 @@ test('a stalled search exits loading and allows a retry', async ({ page }) => {
   await page.unroute('**/api/search?*');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.locator('.search-result')).toContainText('Halloween');
+});
+
+test('deletion requires a session, which persists across reloads', async ({ page, request }) => {
+  const origin = 'http://127.0.0.1:5174';
+  for (const path of [
+    '/api/entries/000000000000000000000000',
+    '/api/viewings/000000000000000000000000'
+  ]) {
+    expect((await request.delete(path, { headers: { origin } })).status()).toBe(401);
+  }
+  expect(
+    (
+      await request.post('/api/delete-session', {
+        headers: { origin: 'https://elsewhere.example' },
+        data: { password: 'browser-test-password' }
+      })
+    ).status()
+  ).toBe(403);
+  await page.goto('/');
+  await page.request.post('/api/delete-session', {
+    headers: { origin },
+    data: { password: 'browser-test-password' }
+  });
+  await page.reload();
+  expect((await (await page.request.get('/api/delete-session')).json()).unlocked).toBe(true);
+  const cookie = (await page.context().cookies()).find((c) => c.name === 'delete_session');
+  expect(cookie.httpOnly).toBe(true);
+  expect(cookie.sameSite).toBe('Strict');
+  expect(cookie.expires).toBe(-1);
 });

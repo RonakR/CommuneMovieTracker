@@ -55,7 +55,7 @@ Movie metadata is cached locally and refreshed on collection access after 150 da
 - `PATCH /api/viewings/:id` — `{ watchedOn }`
 - `DELETE /api/viewings/:id` — removes only that viewing
 
-Writes require a matching Origin header. This is cross-origin request protection, not authentication: everyone who can access the app can edit.
+Writes require a matching Origin header. This is cross-origin request protection, not authentication: everyone who can access the app can add and edit. Deletion requires the shared password.
 
 ## Checks
 
@@ -80,3 +80,9 @@ The Vercel adapter builds Node.js functions with `npm run build`. Import `RonakR
 Set `DEMO_MODE=false`, `MONGODB_URI`, `MONGODB_DATABASE`, and `TMDB_READ_ACCESS_TOKEN` in Vercel's production environment settings. Credentials stay out of Git. Configure Atlas network access for the deployment. No custom `HOST`, `PORT`, `ORIGIN`, or start command is needed.
 
 Movie data and the genre cache persist in MongoDB Atlas across function cold starts. The local demo JSON store is only for local development; use `npm run dev` or `npm run preview` locally.
+
+## Delete protection
+
+Set `PASSWORD` in `.env` locally and in Vercel's production environment before deploying. Adding and editing remain open. Every DELETE request requires a signed, HTTP-only, SameSite=Strict session cookie; HTTPS deployments also mark it Secure. The confirmation modal asks for the password once and remembers authorization for the browser session, up to 12 hours. Browsers that restore sessions may restore the cookie too; the 12-hour server limit still applies. Changing `PASSWORD` invalidates existing sessions. If `PASSWORD` is missing, deletion stays locked.
+
+This is a shared deletion password, not individual user accounts. The raw password is never stored in browser storage or the cookie.

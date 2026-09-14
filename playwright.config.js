@@ -13,7 +13,11 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- --port 5174 --strictPort',
     url: 'http://127.0.0.1:5174',
-    env: { DEMO_MODE: 'true', DEMO_DATA_FILE: '.data/browser-tests.json' },
+    env: {
+      PASSWORD: 'browser-test-password',
+      DEMO_MODE: 'true',
+      DEMO_DATA_FILE: '.data/browser-tests.json'
+    },
     reuseExistingServer: false,
     timeout: 30000
   },

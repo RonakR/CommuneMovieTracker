@@ -17,6 +17,8 @@
   let viewing = $state(null);
   let watchedOn = $state('');
   let pending = $state(false);
+  let deleteUnlocked = $state(false);
+  let deletePassword = $state('');
   let error = $state('');
   let toast = $state('');
   let today = $state(localDate());
@@ -66,12 +68,18 @@
   );
   onMount(() => {
     today = localDate();
+    requestJson('/api/delete-session')
+      .then((value) => {
+        deleteUnlocked = value.unlocked;
+      })
+      .catch(() => {});
   });
   function close() {
     if (!pending) {
       searchController?.abort();
       detailController?.abort();
       modal = null;
+      deletePassword = '';
       error = '';
       searchSequence++;
       detailSequence++;
@@ -108,7 +116,10 @@
       body: payload ? JSON.stringify(payload) : undefined
     });
     const value = await res.json();
-    if (!res.ok) throw new Error(value.message || 'Your change could not be saved.');
+    if (!res.ok) {
+      if (method === 'DELETE' && res.status === 401) deleteUnlocked = false;
+      throw new Error(value.message || 'Your change could not be saved.');
+    }
     return value;
   }
   async function mutate(fn, message, dismiss = true) {
@@ -713,24 +724,51 @@
         ? `Remove ${selected.movie.title} from ${data.year}? This also removes its ${selected.viewings.length} viewing record(s) in this year. Other years are unaffected.`
         : `Remove the ${formatDate(viewing.watchedOn)} viewing of ${selected.movie.title}? The movie stays in your collection.`}
     </p>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
-    <div class="dialog-actions">
-      <button onclick={close} disabled={pending}>Cancel</button><button
-        class="danger"
-        disabled={pending}
-        onclick={() =>
-          mutate(
-            () =>
-              api(
-                modal === 'deleteEntry'
-                  ? `/api/entries/${selected._id}`
-                  : `/api/viewings/${viewing._id}`,
-                'DELETE'
-              ),
-            modal === 'deleteEntry' ? 'Movie removed from this year.' : 'Viewing removed.'
-          )}>{pending ? 'Removing…' : 'Remove'}</button
-      >
-    </div></Modal
+    <form
+      onsubmit={(event) => {
+        event.preventDefault();
+        mutate(
+          async () => {
+            if (!deleteUnlocked) {
+              try {
+                await api('/api/delete-session', 'POST', { password: deletePassword });
+                deleteUnlocked = true;
+              } finally {
+                deletePassword = '';
+              }
+            }
+            await api(
+              modal === 'deleteEntry'
+                ? `/api/entries/${selected._id}`
+                : `/api/viewings/${viewing._id}`,
+              'DELETE'
+            );
+          },
+          modal === 'deleteEntry' ? 'Movie removed from this year.' : 'Viewing removed.'
+        );
+      }}
+    >
+      {#if !deleteUnlocked}
+        <label class="form-label"
+          >Password
+          <input
+            type="password"
+            autocomplete="current-password"
+            bind:value={deletePassword}
+            required
+            disabled={pending}
+          />
+        </label>
+        <p class="dialog-copy">Remembered for this browser session, up to 12 hours.</p>
+      {/if}
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+      <div class="dialog-actions">
+        <button type="button" onclick={close} disabled={pending}>Cancel</button>
+        <button type="submit" class="danger" disabled={pending}
+          >{pending ? 'Removing…' : 'Remove'}</button
+        >
+      </div>
+    </form></Modal
   >
 {:else if modal === 'year'}
   <Modal title="Another year, another shelf." onclose={close}
