@@ -73,6 +73,10 @@ npx playwright test
 
 They use a temporary collection year and remove the entries they create. Install Playwright’s Chromium (`npx playwright install chromium`) if needed.
 
-## Production (later)
+## Production on Vercel
 
-The Node adapter builds with `npm run build` and starts with `npm start`. Render should use `HOST=0.0.0.0`, its provided `PORT`, `ORIGIN` set to the exact public HTTPS origin, and real service credentials with `DEMO_MODE=false`. Production credentials belong in Render environment settings. GitHub and Render deployment have not been configured yet.
+The Vercel adapter builds Node.js functions with `npm run build`. Import `RonakR/CommuneMovieTracker` into Vercel using the SvelteKit preset and deploy `main` to production. GitHub pushes automatically deploy through the Vercel Git integration.
+
+Set `DEMO_MODE=false`, `MONGODB_URI`, `MONGODB_DATABASE`, and `TMDB_READ_ACCESS_TOKEN` in Vercel's production environment settings. Credentials stay out of Git. Configure Atlas network access for the deployment. No custom `HOST`, `PORT`, `ORIGIN`, or start command is needed.
+
+Movie data and the genre cache persist in MongoDB Atlas across function cold starts. The local demo JSON store is only for local development; use `npm run dev` or `npm run preview` locally.

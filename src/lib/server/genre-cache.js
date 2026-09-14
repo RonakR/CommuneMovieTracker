@@ -1,7 +1,7 @@
 const DAY = 24 * 60 * 60 * 1000;
 const RETRY_DELAY = 5 * 60 * 1000;
 
-// Database-backed so a Render cold start reuses the last successful genre fetch.
+// Database-backed so a cold start reuses the last successful genre fetch.
 export function createGenreCache({ read, write, fetchGenres, now = Date.now }) {
   let saved;
   let pending;
